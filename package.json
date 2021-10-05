@@ -26,7 +26,10 @@
     },
     "license": "Apache-2.0",
     "devDependencies": {
-        "@mendix/pluggable-widgets-tools": "8.18.2",
+        "@mendix/pluggable-widgets-tools": "^9.5.4",
+        "@testing-library/jest-dom": "5.9.0",
+        "@testing-library/react": "11.2.5",
+        "@testing-library/react-hooks": "3.2.1",
         "@types/big.js": "^4.0.5",
         "@types/classnames": "^2.2.4",
         "@types/enzyme": "^3.1.10",
@@ -35,12 +38,8 @@
         "@types/jest": "^24.0.0",
         "@types/react": "~16.9.0",
         "@types/react-dom": "~16.9.0",
-        "@types/react-select": "^4.0.13",
         "@types/react-test-renderer": "~16.9.0",
-        "@types/webdriverio": "^4.13.0",
-        "@testing-library/jest-dom": "5.9.0",
-        "@testing-library/react": "11.2.5",
-        "@testing-library/react-hooks": "3.2.1"
+        "@types/webdriverio": "^4.13.0"
     },
     "dependencies": {
         "react-select": "^4.3.1"
