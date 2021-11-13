@@ -1,8 +1,8 @@
-import { useState, createElement, ReactElement, useEffect, useRef } from "react";
-import Select from "react-select";
+import { useState, createElement, ReactElement, useEffect, Component } from "react";
+import Select, { components } from "react-select";
+import Creatable from "react-select/creatable";
 import { ValueStatus } from "mendix";
 import { contains } from "mendix/filters/builders";
-import CreatableSelect from "react-select/creatable";
 import { Styles } from "react-select/src/styles";
 import { OptionTypeBase } from "react-select/src/types";
 
@@ -10,7 +10,6 @@ import { CustomDropdownContainerProps } from "../../../typings/CustomDropdownPro
 import Label, { getStyles as getLabelStyles } from "./Label";
 import { AsyncPaginate, withAsyncPaginate } from "react-select-async-paginate";
 import { attribute, literal, or } from "mendix/filters/builders";
-import Creatable from "react-select/creatable";
 
 export interface Option {
     id: string;
@@ -33,23 +32,51 @@ interface LabelValues {
     imgUrl: string;
 }
 
-export default function CustomDropdown(props: CustomDropdownContainerProps): ReactElement {
-    const [value, setValue] = useState<Option>();
-    const [options, setOptions] = useState<Option[]>([]);
-    const pageSize = 10;
+interface State {
+    value: Option;
+}
 
-    useEffect(() => {
-        props.options.setLimit(pageSize * 3);
+const pageSize = 10;
+
+const CreatablePaginate = withAsyncPaginate(Creatable);
+const SelectPaginate = withAsyncPaginate(Select);
+
+export default class CustomDropdown extends Component<CustomDropdownContainerProps, State> {
+    constructor(props: CustomDropdownContainerProps) {
+        super(props);
+
+        props.options.setLimit(pageSize);
         props.options.setOffset(0);
-    }, []);
 
-    const createOption = (label: string, secondLabel: string, id: string, imageUrl: string): Option => ({
+        this.state = {
+            value: null
+        };
+    }
+
+    componentDidUpdate(prevProps: CustomDropdownContainerProps) {
+        if (
+            prevProps.defaultValue !== this.props.defaultValue &&
+            this.props.defaultValue.status === ValueStatus.Available
+        ) {
+            const defaultValue = this.props.defaultValue.items.map(obj => {
+                const { firstLabel, secondLabel, objId, imgUrl }: LabelValues = this.getLabelValuesDefault(obj);
+                return this.createOption(firstLabel, secondLabel, objId, imgUrl);
+            });
+            if (defaultValue[0] === undefined) {
+                this.setValue(null);
+            } else {
+                this.setValue(defaultValue[0]);
+            }
+        }
+    }
+
+    createOption = (label: string, secondLabel: string, id: string, imageUrl: string): Option => ({
         label: (
             <Label
                 DisplayName={label}
                 UrlString={imageUrl}
-                ClassNamePrefix={props.classNamePrefix}
-                EnableAvatar={props.useAvatar}
+                ClassNamePrefix={this.props.classNamePrefix}
+                EnableAvatar={this.props.useAvatar}
                 SecondLabel={secondLabel}
             />
         ),
@@ -59,247 +86,250 @@ export default function CustomDropdown(props: CustomDropdownContainerProps): Rea
         url: imageUrl
     });
 
-    const clearAction = (actionMeta: any): void => {
-        if (props.contextObjLabel.status === ValueStatus.Available) {
-            props.contextObjLabel.setValue(actionMeta.removedValues[0].value);
+    setValue = (value: Option): void => this.setState({ value });
+
+    clearAction = (actionMeta: any): void => {
+        if (this.props.contextObjLabel.status === ValueStatus.Available) {
+            this.props.contextObjLabel.setValue(actionMeta.removedValues[0].value);
         }
-        if (props.contextObjId.status === ValueStatus.Available) {
-            props.contextObjId.setValue("");
+        if (this.props.contextObjId.status === ValueStatus.Available) {
+            this.props.contextObjId.setValue("");
         }
-        if (props.clearValue.canExecute) {
-            props.clearValue.execute();
+        if (this.props.clearValue.canExecute) {
+            this.props.clearValue.execute();
         }
-        setValue(null);
+        this.setValue(null);
     };
 
-    const createAction = (inputValue: any): void => {
-        if (props.contextObjLabel.status === ValueStatus.Available) {
-            props.contextObjLabel.setValue(inputValue.value);
+    createAction = (inputValue: any): void => {
+        if (this.props.contextObjLabel.status === ValueStatus.Available) {
+            this.props.contextObjLabel.setValue(inputValue.value);
         }
-        if (props.contextObjId.status === ValueStatus.Available) {
-            props.contextObjId.setValue("");
+        if (this.props.contextObjId.status === ValueStatus.Available) {
+            this.props.contextObjId.setValue("");
         }
-        if (props.createValue.canExecute) {
-            props.createValue.execute();
+        if (this.props.createValue.canExecute) {
+            this.props.createValue.execute();
         }
     };
 
-    const selectAction = (inputValue: any): void => {
-        if (props.contextObjLabel.status === ValueStatus.Available) {
-            props.contextObjLabel.setValue(inputValue.value);
+    selectAction = (inputValue: any): void => {
+        if (this.props.contextObjLabel.status === ValueStatus.Available) {
+            this.props.contextObjLabel.setValue(inputValue.value);
         }
-        if (props.contextObjId.status === ValueStatus.Available) {
-            props.contextObjId.setValue(inputValue.id);
+        if (this.props.contextObjId.status === ValueStatus.Available) {
+            this.props.contextObjId.setValue(inputValue.id);
         }
-        if (props.selectOption.canExecute) {
-            props.selectOption.execute();
+        if (this.props.selectOption.canExecute) {
+            this.props.selectOption.execute();
         }
-        setValue(createOption(inputValue.value, inputValue.secondLabel, inputValue.id, inputValue.url));
+        this.setValue(this.createOption(inputValue.value, inputValue.secondLabel, inputValue.id, inputValue.url));
     };
 
-    const getLabelValuesOption = (obj): LabelValues => {
-        const firstLabel: string = props.firstLabelOptions && props.firstLabelOptions(obj).displayValue;
-        const secondLabel: string = props.secondLabelOptions && props.secondLabelOptions(obj).displayValue;
-        const objId: string = props.objIdOptions && props.objIdOptions(obj).displayValue;
-        const imgUrl: string = props.imgUrlOptions && props.imgUrlOptions(obj).displayValue;
+    getLabelValuesOption = (obj): LabelValues => {
+        const firstLabel: string = this.props.firstLabelOptions && this.props.firstLabelOptions(obj).displayValue;
+        const secondLabel: string = this.props.secondLabelOptions && this.props.secondLabelOptions(obj).displayValue;
+        const objId: string = this.props.objIdOptions && this.props.objIdOptions(obj).displayValue;
+        const imgUrl: string = this.props.imgUrlOptions && this.props.imgUrlOptions(obj).displayValue;
         return { firstLabel, secondLabel, objId, imgUrl };
     };
 
-    const getLabelValuesDefault = (obj): LabelValues => {
-        const firstLabel: string = props.firstLabelDefaultValue && props.firstLabelDefaultValue(obj).displayValue;
-        const secondLabel: string = props.secondLabelDefaultValue && props.secondLabelDefaultValue(obj).displayValue;
-        const objId: string = props.objIdDefaultValue && props.objIdDefaultValue(obj).displayValue;
-        const imgUrl: string = props.imgUrlDefaultValue && props.imgUrlDefaultValue(obj).displayValue;
+    getLabelValuesDefault = (obj): LabelValues => {
+        const firstLabel: string = this.props.firstLabelDefaultValue && this.props.firstLabelDefaultValue(obj).displayValue;
+        const secondLabel: string = this.props.secondLabelDefaultValue && this.props.secondLabelDefaultValue(obj).displayValue;
+        const objId: string = this.props.objIdDefaultValue && this.props.objIdDefaultValue(obj).displayValue;
+        const imgUrl: string = this.props.imgUrlDefaultValue && this.props.imgUrlDefaultValue(obj).displayValue;
         return { firstLabel, secondLabel, objId, imgUrl };
     };
 
-    const handleChange = (inputValue: any, actionMeta: any): void => {
+    handleChange = (inputValue: any, actionMeta: any): void => {
         switch (actionMeta.action) {
             case Actions.Select: {
-                selectAction(inputValue);
+                this.selectAction(inputValue);
                 break;
             }
             case Actions.Create: {
-                createAction(inputValue);
+                this.createAction(inputValue);
                 break;
             }
             case Actions.Clear: {
-                clearAction(actionMeta);
+                this.clearAction(actionMeta);
                 break;
             }
         }
     };
 
-    const handleFocus = (): void => {
-        if (props.onFocus && props.onFocus.canExecute) {
-            props.onFocus.execute();
+    handleFocus = (): void => {
+        if (this.props.onFocus && this.props.onFocus.canExecute) {
+            this.props.onFocus.execute();
         }
     };
 
-    const getOptions = (): Option[] => {
+    getOptions = (props: CustomDropdownContainerProps = this.props): Option[] => {
         if (!props.options || props.options.status !== ValueStatus.Available) {
             return [];
         }
 
         return props.options.items.map(obj => {
-            const { firstLabel, secondLabel, objId, imgUrl }: LabelValues = getLabelValuesOption(obj);
-            return createOption(firstLabel, secondLabel, objId, imgUrl);
+            const { firstLabel, secondLabel, objId, imgUrl }: LabelValues = this.getLabelValuesOption(obj);
+            return this.createOption(firstLabel, secondLabel, objId, imgUrl);
         });
     };
 
-    const loadOptions = async (searchQuery: any, loadedOptions: Option[], { page }: any) => {
-        const { offset, limit } = props.options;
-        console.log("loadOptions:", loadedOptions.length, page, offset, limit);
-        props.options.setLimit(loadedOptions.length + pageSize * 3);
+    _resolveLoadOptions: (options: Option[]) => void;
+    _waitAnother: boolean;
 
-        if (searchQuery && props.firstLabelOptions.filterable) {
-            console.log("search query 11:", searchQuery);
-            //console.log('attribute',attribute(this.props.loadedOptions.label));
-            const filterCond = or(
-                contains(attribute(props.firstLabelOptions.id), literal(searchQuery)),
-                contains(attribute(props.secondLabelOptions.id), literal(searchQuery))
-            );
-            props.options.setFilter(filterCond);
-        } else {
-            console.log("Attribute is not filterable");
+    UNSAFE_componentWillReceiveProps(nextProps: CustomDropdownContainerProps) {
+        const options = this.getOptions(nextProps);
+        console.log("UNSAFE_componentWillReceiveProps", !!this._resolveLoadOptions, options);
+
+        if (this._waitAnother) {
+            console.log("Wait for another");
+            this._waitAnother = false;
+            return;
         }
 
-        const nextPage = options.slice(loadedOptions.length, loadedOptions.length + 10);
-        // let filteredOptions;
-        // if (!searchQuery) {
-        //     filteredOptions = nextPage;
-        //     console.log("no search query:");
-        //   } else {
-        //     const searchLower = searchQuery.toLowerCase();
-        //     console.log("search query is :", searchQuery, searchLower);
-        //     filteredOptions = nextPage.filter(({ attribute  }: any) =>         
-        //         attribute.label.toLowerCase().includes(searchLower)       
-        //     );
-        //   }
-        const hasMore = options.length > loadedOptions.length + pageSize;
-
-        return {
-            options: nextPage,
-            hasMore,
-            additional: {
-                page: loadedOptions.length > 0 ? loadedOptions.length / pageSize + 1 : 1
-            }
-        };
-    };
-
-    useEffect(() => {
-        const newOptions = getOptions();
-        console.log("new options:", newOptions);
-        setOptions(newOptions);
-    }, [props.options]);
-
-    useEffect(() => {
-        if (props.defaultValue.status === ValueStatus.Available) {
-            const defaultValue = props.defaultValue.items.map(obj => {
-                const { firstLabel, secondLabel, objId, imgUrl }: LabelValues = getLabelValuesDefault(obj);
-                return createOption(firstLabel, secondLabel, objId, imgUrl);
-            });
-            if (defaultValue[0] === undefined) {
-                setValue(null);
-            } else {
-                setValue(defaultValue[0]);
-            }
-        }
-    }, [props.defaultValue]);
-
-    let styles: Styles<OptionTypeBase, true> = {};
-    if (!props.useDefaultStyle) {
-        styles = {
-            clearIndicator: () => ({}),
-            container: () => ({}),
-            control: () => ({}),
-            dropdownIndicator: () => ({}),
-            group: () => ({}),
-            groupHeading: () => ({}),
-            indicatorsContainer: () => ({}),
-            indicatorSeparator: () => ({}),
-            input: () => ({}),
-            loadingIndicator: () => ({}),
-            loadingMessage: () => ({}),
-            menu: () => ({}),
-            menuList: () => ({}),
-            menuPortal: () => ({}),
-            multiValue: () => ({}),
-            multiValueLabel: () => ({}),
-            multiValueRemove: () => ({}),
-            noOptionsMessage: () => ({}),
-            option: () => ({}),
-            placeholder: () => ({}),
-            singleValue: () => ({}),
-            valueContainer: () => ({})
-        };
+        this._resolveLoadOptions && this._resolveLoadOptions(options);
+        this._resolveLoadOptions = null;
     }
 
-    const isLoading =
-        props.options.status === ValueStatus.Loading ||
-        (props.defaultValue && props.defaultValue.status === ValueStatus.Loading);
+    loadOptions = async (searchQuery: string, loadedOptions: Option[], { page }: any) => {
+        try {
+            const { offset, limit, hasMoreItems: hasMore, filter } = this.props.options;
+            console.log("loadOptions:", loadedOptions.length, page, offset, limit, hasMore);
 
-    const initialOptions = options.slice(0, pageSize);
-    const CreatablePaginate = withAsyncPaginate(CreatableSelect);
-    const SelectPaginate = withAsyncPaginate(Select);
+            let timeout: NodeJS.Timeout;
 
-    if (props.enableCreate) {
-        console.log('enable create ..................', props.enableCreate)
+            const newOptions: Option[] = await new Promise((resolve, reject) => {
+                // filtering
+                if (searchQuery && this.props.firstLabelOptions.filterable) {
+                    const filterCond = or(
+                        contains(attribute(this.props.firstLabelOptions.id), literal(searchQuery)),
+                        contains(attribute(this.props.secondLabelOptions.id), literal(searchQuery))
+                    );
+                    this._resolveLoadOptions = resolve;
+                    this._waitAnother = true;
+                    this.props.options.setFilter(filterCond);
+                    this.props.options.setLimit(page * pageSize);
+                } else {
+                    console.log("Attribute is not filterable");
+                    this._resolveLoadOptions = resolve;
+                    if (filter) {
+                        this._waitAnother = true;
+                        this.props.options.setFilter(undefined);
+                    }
+                    this.props.options.setLimit(page * pageSize);
+                }
+
+                timeout = setTimeout(() => resolve(this.getOptions()), 1000);
+            });
+
+            clearTimeout(timeout);
+
+            const nextPage = newOptions.slice(loadedOptions.length, loadedOptions.length + pageSize);
+
+            return {
+                options: newOptions,
+                hasMore,
+                additional: {
+                    page: searchQuery ? 1 : page + 1
+                }
+            };
+        } catch (error) {
+            console.error("Failed to load new options", error);
+        }
+    };
+
+    render() {
+        let styles: Styles<OptionTypeBase, true> = {};
+        if (!this.props.useDefaultStyle) {
+            styles = {
+                clearIndicator: () => ({}),
+                container: () => ({}),
+                control: () => ({}),
+                dropdownIndicator: () => ({}),
+                group: () => ({}),
+                groupHeading: () => ({}),
+                indicatorsContainer: () => ({}),
+                indicatorSeparator: () => ({}),
+                input: () => ({}),
+                loadingIndicator: () => ({}),
+                loadingMessage: () => ({}),
+                menu: () => ({}),
+                menuList: () => ({}),
+                menuPortal: () => ({}),
+                multiValue: () => ({}),
+                multiValueLabel: () => ({}),
+                multiValueRemove: () => ({}),
+                noOptionsMessage: () => ({}),
+                option: () => ({}),
+                placeholder: () => ({}),
+                singleValue: () => ({}),
+                valueContainer: () => ({})
+            };
+        }
+
+        const isLoading =
+            this.props.options.status === ValueStatus.Loading ||
+            (this.props.defaultValue && this.props.defaultValue.status === ValueStatus.Loading);
+
+        if (this.props.enableCreate) {
+            return (
+                <div>
+                    <style type="text/css" scoped>
+                        {getLabelStyles(this.props.classNamePrefix)}
+                    </style>
+                    <CreatablePaginate
+                        /*
+                        // @ts-ignore */
+                        SelectComponent={Creatable}
+                        loadOptions={this.loadOptions}
+                        value={this.state.value}
+                        onChange={this.handleChange}
+                        isClearable={this.props.enableClear}
+                        isSearchable={this.props.enableSearch}
+                        isLoading={isLoading}
+                        styles={styles}
+                        placeholder={this.props.placeholder}
+                        className={this.props.className!}
+                        classNamePrefix={this.props.classNamePrefix}
+                        additional={{
+                            page: 1
+                        }}
+                        reduceOptions={(_, loaded) => loaded}
+                        maxMenuHeight={this.props.menuHeight}
+                        onFocus={this.handleFocus}
+                    />
+                </div>
+            );
+        }
+
         return (
             <div>
                 <style type="text/css" scoped>
-                    {getLabelStyles(props.classNamePrefix)}
+                    {getLabelStyles(this.props.classNamePrefix)}
                 </style>
-                <AsyncPaginate
+                <SelectPaginate
                     /*
                     // @ts-ignore */
-                    SelectComponent={Creatable}
                     loadOptions={loadOptions}
-                    options={initialOptions}
-                    value={value}
-                    onChange={handleChange}
-                    isClearable={props.enableClear}
-                    isSearchable={props.enableSearch}
+                    value={this.state.value}
+                    onChange={this.handleChange}
+                    isClearable={this.props.enableClear}
+                    isSearchable={this.props.enableSearch}
                     isLoading={isLoading}
                     styles={styles}
-                    placeholder={props.placeholder}
-                    className={props.className!}
-                    classNamePrefix={props.classNamePrefix}
+                    placeholder={this.props.placeholder}
+                    className={this.props.className!}
+                    classNamePrefix={this.props.classNamePrefix}
                     additional={{
                         page: 1
                     }}
-                    maxMenuHeight={props.menuHeight}
-                    onFocus={handleFocus}
+                    reduceOptions={(_, loaded) => loaded}
+                    maxMenuHeight={this.props.menuHeight}
+                    onFocus={this.handleFocus}
                 />
             </div>
         );
     }
-
-    return (
-        <div>
-            <style type="text/css" scoped>
-                {getLabelStyles(props.classNamePrefix)}
-            </style>
-            <AsyncPaginate
-                /*
-                // @ts-ignore */
-                loadOptions={loadOptions}
-                options={initialOptions}
-                value={value}
-                onChange={handleChange}
-                isClearable={props.enableClear}
-                isSearchable={props.enableSearch}
-                isLoading={isLoading}
-                styles={styles}
-                placeholder={props.placeholder}
-                className={props.className!}
-                classNamePrefix={props.classNamePrefix}
-                additional={{
-                    page: 1
-                }}
-                maxMenuHeight={props.menuHeight}
-                onFocus={handleFocus}
-            />
-        </div>
-    );
 }
