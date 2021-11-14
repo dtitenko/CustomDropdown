@@ -1,15 +1,15 @@
-import { useState, createElement, ReactElement, useEffect, Component } from "react";
-import Select, { components } from "react-select";
+import { createElement, ReactElement, Component } from "react";
+import Select from "react-select";
 import Creatable from "react-select/creatable";
-import { ValueStatus } from "mendix";
-import { contains } from "mendix/filters/builders";
 import { Styles } from "react-select/src/styles";
 import { OptionTypeBase } from "react-select/src/types";
+import { withAsyncPaginate } from "react-select-async-paginate";
+
+import { ValueStatus } from "mendix";
+import { contains, attribute, literal, or } from "mendix/filters/builders";
 
 import { CustomDropdownContainerProps } from "../../../typings/CustomDropdownProps";
 import Label, { getStyles as getLabelStyles } from "./Label";
-import { AsyncPaginate, withAsyncPaginate } from "react-select-async-paginate";
-import { attribute, literal, or } from "mendix/filters/builders";
 
 export interface Option {
     id: string;
@@ -53,7 +53,10 @@ export default class CustomDropdown extends Component<CustomDropdownContainerPro
         };
     }
 
-    componentDidUpdate(prevProps: CustomDropdownContainerProps) {
+    _resolveLoadOptions: (options: Option[]) => void;
+    _waitAnotherPropsUpdate: boolean;
+
+    componentDidUpdate(prevProps: CustomDropdownContainerProps): void {
         if (
             prevProps.defaultValue !== this.props.defaultValue &&
             this.props.defaultValue.status === ValueStatus.Available
@@ -68,6 +71,17 @@ export default class CustomDropdown extends Component<CustomDropdownContainerPro
                 this.setValue(defaultValue[0]);
             }
         }
+    }
+
+    UNSAFE_componentWillReceiveProps(nextProps: CustomDropdownContainerProps): void {
+        if (this._waitAnotherPropsUpdate) {
+            this._waitAnotherPropsUpdate = false;
+            return;
+        }
+
+        const options = this.getOptions(nextProps);
+        this._resolveLoadOptions && this._resolveLoadOptions(options);
+        this._resolveLoadOptions = null;
     }
 
     createOption = (label: string, secondLabel: string, id: string, imageUrl: string): Option => ({
@@ -127,18 +141,21 @@ export default class CustomDropdown extends Component<CustomDropdownContainerPro
     };
 
     getLabelValuesOption = (obj): LabelValues => {
-        const firstLabel: string = this.props.firstLabelOptions && this.props.firstLabelOptions(obj).displayValue;
-        const secondLabel: string = this.props.secondLabelOptions && this.props.secondLabelOptions(obj).displayValue;
-        const objId: string = this.props.objIdOptions && this.props.objIdOptions(obj).displayValue;
-        const imgUrl: string = this.props.imgUrlOptions && this.props.imgUrlOptions(obj).displayValue;
+        const firstLabel: string = this.props.firstLabelOptions && this.props.firstLabelOptions.get(obj).displayValue;
+        const secondLabel: string =
+            this.props.secondLabelOptions && this.props.secondLabelOptions.get(obj).displayValue;
+        const objId: string = this.props.objIdOptions && this.props.objIdOptions.get(obj).displayValue;
+        const imgUrl: string = this.props.imgUrlOptions && this.props.imgUrlOptions.get(obj).displayValue;
         return { firstLabel, secondLabel, objId, imgUrl };
     };
 
     getLabelValuesDefault = (obj): LabelValues => {
-        const firstLabel: string = this.props.firstLabelDefaultValue && this.props.firstLabelDefaultValue(obj).displayValue;
-        const secondLabel: string = this.props.secondLabelDefaultValue && this.props.secondLabelDefaultValue(obj).displayValue;
-        const objId: string = this.props.objIdDefaultValue && this.props.objIdDefaultValue(obj).displayValue;
-        const imgUrl: string = this.props.imgUrlDefaultValue && this.props.imgUrlDefaultValue(obj).displayValue;
+        const firstLabel: string =
+            this.props.firstLabelDefaultValue && this.props.firstLabelDefaultValue.get(obj).displayValue;
+        const secondLabel: string =
+            this.props.secondLabelDefaultValue && this.props.secondLabelDefaultValue.get(obj).displayValue;
+        const objId: string = this.props.objIdDefaultValue && this.props.objIdDefaultValue.get(obj).displayValue;
+        const imgUrl: string = this.props.imgUrlDefaultValue && this.props.imgUrlDefaultValue.get(obj).displayValue;
         return { firstLabel, secondLabel, objId, imgUrl };
     };
 
@@ -176,23 +193,6 @@ export default class CustomDropdown extends Component<CustomDropdownContainerPro
         });
     };
 
-    _resolveLoadOptions: (options: Option[]) => void;
-    _waitAnother: boolean;
-
-    UNSAFE_componentWillReceiveProps(nextProps: CustomDropdownContainerProps) {
-        const options = this.getOptions(nextProps);
-        console.log("UNSAFE_componentWillReceiveProps", !!this._resolveLoadOptions, options);
-
-        if (this._waitAnother) {
-            console.log("Wait for another");
-            this._waitAnother = false;
-            return;
-        }
-
-        this._resolveLoadOptions && this._resolveLoadOptions(options);
-        this._resolveLoadOptions = null;
-    }
-
     loadOptions = async (searchQuery: string, loadedOptions: Option[], { page }: any) => {
         try {
             const { offset, limit, hasMoreItems: hasMore, filter } = this.props.options;
@@ -200,33 +200,30 @@ export default class CustomDropdown extends Component<CustomDropdownContainerPro
 
             let timeout: NodeJS.Timeout;
 
-            const newOptions: Option[] = await new Promise((resolve, reject) => {
+            const newOptions: Option[] = await new Promise(resolve => {
+                this._resolveLoadOptions = resolve;
+
                 // filtering
                 if (searchQuery && this.props.firstLabelOptions.filterable) {
                     const filterCond = or(
                         contains(attribute(this.props.firstLabelOptions.id), literal(searchQuery)),
                         contains(attribute(this.props.secondLabelOptions.id), literal(searchQuery))
                     );
-                    this._resolveLoadOptions = resolve;
-                    this._waitAnother = true;
+
+                    this._waitAnotherPropsUpdate = true;
                     this.props.options.setFilter(filterCond);
-                    this.props.options.setLimit(page * pageSize);
                 } else {
-                    console.log("Attribute is not filterable");
-                    this._resolveLoadOptions = resolve;
                     if (filter) {
-                        this._waitAnother = true;
+                        this._waitAnotherPropsUpdate = true;
                         this.props.options.setFilter(undefined);
                     }
-                    this.props.options.setLimit(page * pageSize);
                 }
 
+                this.props.options.setLimit(page * pageSize);
                 timeout = setTimeout(() => resolve(this.getOptions()), 1000);
             });
 
             clearTimeout(timeout);
-
-            const nextPage = newOptions.slice(loadedOptions.length, loadedOptions.length + pageSize);
 
             return {
                 options: newOptions,
@@ -240,7 +237,7 @@ export default class CustomDropdown extends Component<CustomDropdownContainerPro
         }
     };
 
-    render() {
+    render(): ReactElement {
         let styles: Styles<OptionTypeBase, true> = {};
         if (!this.props.useDefaultStyle) {
             styles = {
@@ -280,8 +277,6 @@ export default class CustomDropdown extends Component<CustomDropdownContainerPro
                         {getLabelStyles(this.props.classNamePrefix)}
                     </style>
                     <CreatablePaginate
-                        /*
-                        // @ts-ignore */
                         SelectComponent={Creatable}
                         loadOptions={this.loadOptions}
                         value={this.state.value}
@@ -310,9 +305,7 @@ export default class CustomDropdown extends Component<CustomDropdownContainerPro
                     {getLabelStyles(this.props.classNamePrefix)}
                 </style>
                 <SelectPaginate
-                    /*
-                    // @ts-ignore */
-                    loadOptions={loadOptions}
+                    loadOptions={this.loadOptions}
                     value={this.state.value}
                     onChange={this.handleChange}
                     isClearable={this.props.enableClear}
